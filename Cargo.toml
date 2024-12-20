@@ -5,6 +5,9 @@ edition = "2021"
 
 [dependencies]
 rhai = {git = "https://github.com/rhaiscript/rhai" }
+serde = {version = "1.0.210", features = ["derive"]}
+serde_json = "1.0.128"
+dashi = {git = "https://github.com/JordanHendl/dashi", features = ["dashi-serde"]}
 
 [build-dependencies]
 walkdir = "2.4.0"
@@ -13,3 +16,5 @@ walkdir = "2.4.0"
 # Defaults for SLANG_SRC_DIR and SLANG_OUT_DIR
 src_dir = "src/slang"
 out_dir = "target/slang_out"
+
+[lib]
