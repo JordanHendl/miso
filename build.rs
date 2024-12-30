@@ -22,7 +22,7 @@ fn collect_slang_files(dir: &Path, slang_files: &mut Vec<PathBuf>) {
 
 fn main() {
     // Get the source and output directories from environment variables.
-    let out_dir = env::var("SLANG_OUT_DIR").unwrap_or_else(|_| "target/slang_out".to_string());
+    let out_dir = env::var("SLANG_OUT_DIR").unwrap_or_else(|_| "target/spirv".to_string());
     let src_dir = env::var("SLANG_SRC_DIR").unwrap_or_else(|_| "src/slang".to_string());
 
     let src_path = Path::new(&src_dir);

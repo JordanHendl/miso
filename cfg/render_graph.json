@@ -1,34 +1,52 @@
 {
   "render_pass": {
-    "size": [1280, 1024],
-    "subpasses": [ {
+    "subpasses": [
+      {
         "name": "main-pass",
-        "attachments": [ {
+        "attachments": [
+          {
             "name": "color",
-            "type": "Color"
-          }, {
+            "type": "Color",
+            "size": [1280, 1024]
+          },
+          {
             "name": "depth",
-            "type": "Depth"
+            "type": "Depth",
+            "size": [1280, 1024]
           }
         ]
       }
     ]
   },
-
-  "nodes": [ {
-      "name": "base_pass",
-      "graphics": "stdrender",
-      "subpass": "main-pass",
-      "render_masks": ["standard", "shadow"]
-    }, {
-      "name": "base-compute",
-      "compute": "stdcompute",
-      "render_masks": ["standard", "shadow"]
+  
+  "cameras": [ {
+      "name": "main-camera",
+      "transform": [1.0, 0.0, 0.0, 0.0,
+                    0.0, 1.0, 0.0, 0.0,
+                    0.0, 0.0, 1.0, 0.0
+                    0.0, 0.0, 0.0, 1.0],
     }
   ],
 
-  "execution_order": [
-    "base_pass",
-    "OUTPUT"
-  ]
+
+  "passes": [ {
+      "name": "non-transparent",
+      "camera": "main-camera",
+      "graphics": "stdrender",
+      "subpass": "main-pass",
+      "render_masks": ["standard"]
+    }, {
+      "name": "transparent",
+      "camera": "main-camera",
+      "graphics": "stdtransparent",
+      "subpass": "main-pass",
+      "render_masks": ["transparent"]
+    } 
+  ],
+
+  "display": {
+    "name": "Miso",
+    "size": [1280, 1024],
+    "input": "main-pass.color"
+  }
 }

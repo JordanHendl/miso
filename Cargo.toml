@@ -4,10 +4,14 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
+glam = "0.24.0" 
 rhai = {git = "https://github.com/rhaiscript/rhai" }
 serde = {version = "1.0.210", features = ["derive"]}
 serde_json = "1.0.128"
 dashi = {git = "https://github.com/JordanHendl/dashi", features = ["dashi-serde"]}
+
+[dev-dependencies]
+gltf = "1.4.1"
 
 [build-dependencies]
 walkdir = "2.4.0"

@@ -8,12 +8,11 @@ use crate::common;
 
 enum Pipeline {
     Graphics(Handle<GraphicsPipeline>),
-    Compute(Handle<ComputePipeline>),
+    Compute((Handle<ComputePipeline>, [u32; 3])),
 }
 
 pub struct ExecutionStrategy {
     pipeline: Pipeline,
-    dispatch: Option<[u32; 3]>,
 }
 
 pub struct Algorithm {
