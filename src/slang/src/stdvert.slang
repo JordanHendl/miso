@@ -17,6 +17,7 @@ struct VSOutput
     float3 color : COLOR;
 };
 
+[shader("vertex")]
 VSOutput main(VSInput input)
 {
     VSOutput output;

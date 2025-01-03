@@ -22,16 +22,14 @@ pub struct Attachment {
 #[derive(Deserialize, Clone, Debug)]
 pub struct Camera {
     pub name: String,
-    pub position: [f32; 3],
-    pub front: [f32; 3],
-    pub up: [f32; 3],
+    pub transform: [f32; 16],
 }
 
 #[derive(Deserialize, Clone, Debug)]
 pub struct Pass {
     pub name: String,
     pub camera: String, // References a camera by name
-    pub graphics: String,
+    pub graphics: Vec<String>,
     pub subpass: String,
     pub render_masks: Vec<String>,
 }

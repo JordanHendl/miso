@@ -23,8 +23,8 @@
       "name": "main-camera",
       "transform": [1.0, 0.0, 0.0, 0.0,
                     0.0, 1.0, 0.0, 0.0,
-                    0.0, 0.0, 1.0, 0.0
-                    0.0, 0.0, 0.0, 1.0],
+                    0.0, 0.0, 1.0, 0.0,
+                    0.0, 0.0, 0.0, 1.0]
     }
   ],
 
@@ -32,17 +32,10 @@
   "passes": [ {
       "name": "non-transparent",
       "camera": "main-camera",
-      "graphics": "stdrender",
+      "graphics": ["standard"],
       "subpass": "main-pass",
       "render_masks": ["standard"]
-    }, {
-      "name": "transparent",
-      "camera": "main-camera",
-      "graphics": "stdtransparent",
-      "subpass": "main-pass",
-      "render_masks": ["transparent"]
-    } 
-  ],
+    }],
 
   "display": {
     "name": "Miso",
