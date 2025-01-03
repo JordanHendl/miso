@@ -29,8 +29,10 @@ pub struct Camera {
 pub struct Pass {
     pub name: String,
     pub camera: String, // References a camera by name
-    pub graphics: Vec<String>,
-    pub subpass: String,
+    pub graphics: String,
+    pub subpass: u32,
+    pub blends: Option<Vec<dashi::ColorBlendState>>,
+    pub depth_info: Option<dashi::DepthInfo>,
     pub render_masks: Vec<String>,
 }
 

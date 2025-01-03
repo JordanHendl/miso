@@ -7,13 +7,13 @@ use std::{
 use common::Hotbuffer;
 use dashi::{
     utils::{Handle, Pool},
-    Attachment, BindGroup, BindGroupLayout, BindGroupLayoutInfo, BindGroupVariable,
-    BindGroupVariableType, BindlessBindGroupLayoutInfo, Buffer, Context, CullMode, FRect2D, Format,
-    GraphicsPipeline, GraphicsPipelineDetails, GraphicsPipelineInfo, GraphicsPipelineLayout,
-    GraphicsPipelineLayoutInfo, Image, ImageInfo, ImageView, ImageViewInfo, IndexedBindGroupInfo,
-    IndexedBindingInfo, IndexedResource, PipelineShaderInfo, Rect2D, RenderPass, RenderPassInfo,
-    Sampler, ShaderInfo, ShaderResource, ShaderType, VertexDescriptionInfo, VertexEntryInfo,
-    VertexOrdering, Viewport,
+    Attachment, AttachmentDescription, BindGroup, BindGroupLayout, BindGroupLayoutInfo,
+    BindGroupVariable, BindGroupVariableType, BindlessBindGroupLayoutInfo, Buffer, Context,
+    CullMode, FRect2D, Format, GraphicsPipeline, GraphicsPipelineDetails, GraphicsPipelineInfo,
+    GraphicsPipelineLayout, GraphicsPipelineLayoutInfo, Image, ImageInfo, ImageView, ImageViewInfo,
+    IndexedBindGroupInfo, IndexedBindingInfo, IndexedResource, PipelineShaderInfo, Rect2D,
+    RenderPass, RenderPassInfo, Sampler, ShaderInfo, ShaderResource, ShaderType,
+    SubpassDescription, VertexDescriptionInfo, VertexEntryInfo, VertexOrdering, Viewport,
 };
 use glam::*;
 use inline_spirv::include_spirv;
@@ -106,15 +106,12 @@ fn make_rp(ctx: &mut dashi::Context, config: &json::Config) -> MisoRenderPass {
             let (img, view) = create_view_from_attachment(ctx, attachment);
             images.insert(attachment.name.clone(), MisoRenderImage { img, view });
             if attachment.kind == "Color" {
-                color_attachments.push(dashi::Attachment {
-                    view,
-                    clear_color: [0.0, 0.0, 0.0, 1.0], // Default clear color
+                color_attachments.push(dashi::AttachmentDescription {
                     ..Default::default()
                 });
             } else if attachment.kind == "Depth" {
-                depth_attachments.push(Attachment {
-                    view,
-                    clear_color: [0.0, 0.0, 0.0, 0.0], // Depth attachments typically don't use clear colors
+                depth_attachments.push(AttachmentDescription {
+                    format: Format::D24S8,
                     ..Default::default()
                 });
             }
@@ -138,7 +135,7 @@ fn make_rp(ctx: &mut dashi::Context, config: &json::Config) -> MisoRenderPass {
             Some(&depth_attachments[t])
         };
 
-        subpasses.push(dashi::Subpass {
+        subpasses.push(SubpassDescription {
             color_attachments: &color_attachments
                 [color_offset..config_subpass.attachments.len() - 1],
             depth_stencil_attachment: dep,
@@ -557,7 +554,7 @@ impl MisoScene {
         let stdfrag = include_spirv!("target/spirv/stdvert.spv");
 
         for pipe in &cfg.passes {
-            let (vshader, pshader) = match pipe.graphics[0].as_str() {
+            let (vshader, pshader) = match pipe.graphics.as_str() {
                 "standard" => (stdvert.as_slice(), stdfrag.as_slice()),
                 _ => todo!(),
             };
@@ -567,6 +564,36 @@ impl MisoScene {
                 Some(self.bg_layouts.per_frame),
                 Some(self.bg_layouts.per_object),
             ];
+
+            let rp = self.render_pass.handle.clone();
+            let subpass_info = cfg.render_pass.subpasses[pipe.subpass as usize].clone();
+            let has_depth = subpass_info
+                .attachments
+                .iter()
+                .find(|a| a.kind.to_lowercase() == "depth")
+                .is_some();
+
+            let num_attachments = if has_depth {
+                (subpass_info.attachments.len() - 1) as u32
+            } else {
+                subpass_info.attachments.len() as u32
+            };
+
+            let color_blends = pipe
+                .blends
+                .as_ref()
+                .unwrap_or(&vec![Default::default(); num_attachments as usize])
+                .clone();
+
+            let depth_info = if has_depth {
+                if let Some(i) = pipe.depth_info {
+                    Some(i.clone())
+                } else {
+                    Some(Default::default())
+                }
+            } else {
+                None
+            };
 
             let layout = self
                 .get_ctx()
@@ -620,19 +647,19 @@ impl MisoScene {
                         topology: dashi::Topology::TriangleList,
                         culling: CullMode::None,
                         front_face: VertexOrdering::Clockwise,
-                        depth_test: false,
+                        depth_test: depth_info,
+                        color_blend_states: color_blends.clone(),
                     },
                 })
                 .unwrap();
 
-            let rp = self.render_pass.handle;
             let pipeline = self
                 .get_ctx()
                 .make_graphics_pipeline(&GraphicsPipelineInfo {
                     debug_name: &pipe.name,
                     layout,
                     render_pass: rp,
-                    subpass_id: 0, // JHTODO prob should be configurable
+                    subpass_id: pipe.subpass as u8,
                 })
                 .unwrap();
 

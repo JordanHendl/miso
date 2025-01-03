@@ -32,8 +32,8 @@
   "passes": [ {
       "name": "non-transparent",
       "camera": "main-camera",
-      "graphics": ["standard"],
-      "subpass": "main-pass",
+      "graphics": "standard",
+      "subpass": 0,
       "render_masks": ["standard"]
     }],
 
