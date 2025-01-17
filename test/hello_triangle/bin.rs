@@ -1,4 +1,5 @@
 use dashi::*;
+use sdl2::{event::Event, keyboard::Keycode};
 
 pub struct ImageLoadInfo<T> {
     pub filename: String,
@@ -74,13 +75,22 @@ fn main() {
 
     let mut ctx = dashi::Context::new(&Default::default()).unwrap();
     let mut scene = miso::MisoScene::new(&mut ctx, &miso::MisoSceneInfo { cfg: cfg.clone() });
+    let mut event_pump = ctx.get_sdl_ctx().event_pump().unwrap();
 
     let VERTICES: [Vertex; 3] = [
-        Vertex { position: vec4(0.0, -0.5, 0.0, 1.0), ..Default::default() }, // Vertex 0: Bottom
-        Vertex { position: vec4(0.5, 0.5, 0.0, 1.0), ..Default::default() }, // Vertex 0: Bottom
-        Vertex { position: vec4(-0.5, 0.5, 0.0, 1.0), ..Default::default() }, // Vertex 0: Bottom
+        Vertex {
+            position: vec4(0.0, -0.5, 0.0, 1.0),
+            ..Default::default()
+        }, // Vertex 0: Bottom
+        Vertex {
+            position: vec4(0.5, 0.5, 0.0, 1.0),
+            ..Default::default()
+        }, // Vertex 0: Bottom
+        Vertex {
+            position: vec4(-0.5, 0.5, 0.0, 1.0),
+            ..Default::default()
+        }, // Vertex 0: Bottom
     ];
-
 
     const INDICES: [u32; 3] = [
         0, 1, 2, // Triangle: uses vertices 0, 1, and 2
@@ -119,7 +129,7 @@ fn main() {
 
     let material = scene.register_material(&MaterialInfo {
         name: "hello-triangle".to_string(),
-        passes: vec!["base-color".to_string()],
+        passes: vec!["non-transparent".to_string()],
         base_color,
         ..Default::default()
     });
@@ -129,11 +139,25 @@ fn main() {
         material,
         transform: Default::default(),
     });
-    
-    loop {
+
+    'running: loop {
+        // Listen to events
+        for event in event_pump.poll_iter() {
+            match event {
+                Event::Quit { .. }
+                | Event::KeyDown {
+                    keycode: Some(Keycode::Escape),
+                    ..
+                } => {
+                    break 'running;
+                }
+                _ => {}
+            }
+        }
+
         scene.update();
     }
-//
+    //
     ctx.clean_up();
 }
 

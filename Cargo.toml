@@ -17,7 +17,9 @@ dashi = {path = "C:/Program Files/Git/wksp/git/dashi", features = ["dashi-serde"
 inline-spirv = {version = "0.2.1"}
 gltf = {version = "1.4.1", optional = true}
 image = {version = "0.24", optional = true}
-
+spirv-reflect = "0.2.2"
+spirv_cross = {version = "0.23.1", features = ["hlsl"]}
+sdl2 = {version = "0.37.0", features = ["bundled", "static-link", "raw-window-handle"]}
 [dev-dependencies]
 
 [build-dependencies]

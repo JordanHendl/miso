@@ -1,4 +1,7 @@
 // Fragment Shader (fragment.slang)
+
+import miso;
+
 struct FSInput
 {
     float3 color : COLOR;
@@ -13,7 +16,7 @@ struct FSOutput
 FSOutput main(FSInput input)
 {
     FSOutput output;
-    output.color = float4(input.color, 1.0); // Output the interpolated vertex color
+    output.color = float4(input.color, 1.0); // Output the interpolated vertex colo:
     return output;
 }
 

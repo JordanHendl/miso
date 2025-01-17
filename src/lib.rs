@@ -1,3 +1,4 @@
+pub use sdl2::{event::Event, keyboard::Keycode};
 use std::{
     collections::{HashMap, VecDeque},
     fs::{self, File},
@@ -6,14 +7,17 @@ use std::{
 
 use common::Hotbuffer;
 use dashi::{
-    utils::{Handle, Pool},
-    Attachment, AttachmentDescription, BindGroup, BindGroupLayout, BindGroupLayoutInfo,
-    BindGroupVariable, BindGroupVariableType, BindlessBindGroupLayoutInfo, Buffer, Context,
-    CullMode, FRect2D, Format, GraphicsPipeline, GraphicsPipelineDetails, GraphicsPipelineInfo,
-    GraphicsPipelineLayout, GraphicsPipelineLayoutInfo, Image, ImageInfo, ImageView, ImageViewInfo,
-    IndexedBindGroupInfo, IndexedBindingInfo, IndexedResource, PipelineShaderInfo, Rect2D,
-    RenderPass, RenderPassInfo, Sampler, ShaderInfo, ShaderResource, ShaderType,
-    SubpassDescription, VertexDescriptionInfo, VertexEntryInfo, VertexOrdering, Viewport,
+    utils::{per_frame::PerFrame, Handle, Pool},
+    Attachment, AttachmentDescription, BindGroup, BindGroupInfo, BindGroupLayout,
+    BindGroupLayoutInfo, BindGroupVariable, BindGroupVariableType, BindlessBindGroupLayoutInfo,
+    Buffer, BufferUsage, CommandListInfo, Context, CullMode, Display, DisplayInfo, DrawBegin,
+    DrawIndexed, DynamicAllocator, DynamicAllocatorInfo, FRect2D, Filter, Format,
+    FramedCommandList, GraphicsPipeline, GraphicsPipelineDetails, GraphicsPipelineInfo,
+    GraphicsPipelineLayout, GraphicsPipelineLayoutInfo, Image, ImageBlit, ImageInfo, ImageView,
+    ImageViewInfo, IndexedBindGroupInfo, IndexedBindingInfo, IndexedResource, PipelineShaderInfo,
+    Rect2D, RenderPass, RenderPassInfo, Sampler, Semaphore, ShaderInfo, ShaderResource, ShaderType,
+    SubmitInfo, Subpass, SubpassDescription, VertexDescriptionInfo, VertexEntryInfo,
+    VertexOrdering, Viewport, WindowInfo,
 };
 use glam::*;
 use inline_spirv::include_spirv;
@@ -24,6 +28,7 @@ mod common;
 pub mod graph;
 mod json;
 mod pass;
+mod reflection;
 
 struct ResourceList<T> {
     pub pool: Pool<T>,
@@ -255,9 +260,15 @@ pub struct MaterialInfo {
 }
 
 #[derive(Default)]
-pub struct Material {
+pub struct MaterialShaderData {
     base_color: Handle<Texture>,
     normal: Handle<Texture>,
+}
+
+#[derive(Default)]
+pub struct Material {
+    data: MaterialShaderData,
+    passes: Vec<String>,
 }
 
 pub struct ObjectInfo {
@@ -320,9 +331,12 @@ struct MisoSubpass {
     per_pipeline_bg: Handle<BindGroup>,
     non_batched: Vec<MisoBatch>,
     objects: Pool<PassObject>,
+    reflection: reflection::ShaderInspector,
+    bg_layouts: [Option<Handle<BindGroupLayout>>; 4],
     objects_to_add: Vec<Handle<Renderable>>,
 }
 
+#[derive(Default)]
 struct MisoRenderPass {
     handle: Handle<RenderPass>,
     images: HashMap<String, MisoRenderImage>,
@@ -361,6 +375,14 @@ struct RendererInfo {
 #[derive(Default)]
 pub struct DeletionQueue<T> {
     queue: VecDeque<Box<dyn FnOnce() -> T + Send + 'static>>,
+}
+
+impl<T: Clone> Clone for DeletionQueue<T> {
+    fn clone(&self) -> Self {
+        Self {
+            queue: Default::default(),
+        }
+    }
 }
 
 impl<T> DeletionQueue<T> {
@@ -406,7 +428,7 @@ impl<T> DeletionQueue<T> {
     }
 }
 
-#[derive(Default)]
+#[derive(Default, Clone)]
 struct Deletion {
     tex: DeletionQueue<Handle<Texture>>,
 }
@@ -419,15 +441,60 @@ struct MisoBGLayouts {
     per_object: Handle<BindGroupLayout>,
 }
 
-pub struct MisoScene {
+#[derive(Default, Clone)]
+struct SubpassAttachments {
+    name: String,
+    colors: Vec<Attachment>,
+    depth: Option<Attachment>,
+}
+
+#[derive(Default, Clone)]
+struct PerFrameResources {
+    subpasses: Vec<SubpassAttachments>,
+    out_image: Handle<ImageView>,
+    delete_queue: Deletion,
+    sems: Vec<Handle<Semaphore>>,
+}
+
+struct GlobalResources {
     ctx: *mut Context,
-    delete: Deletion,
-    textures: ResourceList<Texture>,
+    subpasses: Vec<MisoSubpass>,
+    cameras: ResourceList<Camera>,
+    dynamic: DynamicAllocator,
     meshes: Pool<Mesh>,
     materials: Pool<Material>,
+    textures: ResourceList<Texture>,
     renderables: Pool<Renderable>,
     render_pass: MisoRenderPass,
     bg_layouts: MisoBGLayouts,
+    bindless: Handle<BindGroup>,
+    display: Option<Display>,
+}
+
+impl Default for GlobalResources {
+    fn default() -> Self {
+        const RESOURCE_LIST_SZ: usize = 1024;
+        Self {
+            ctx: std::ptr::null_mut(),
+            subpasses: Default::default(),
+            cameras: ResourceList::new(RESOURCE_LIST_SZ),
+            textures: ResourceList::new(RESOURCE_LIST_SZ),
+            meshes: Pool::new(RESOURCE_LIST_SZ),
+            materials: Default::default(),
+            renderables: Default::default(),
+            render_pass: Default::default(),
+            bg_layouts: Default::default(),
+            display: Option::default(),
+            bindless: Default::default(),
+            dynamic: Default::default(),
+        }
+    }
+}
+
+pub struct MisoScene {
+    global_res: GlobalResources,
+    frame: PerFrame<PerFrameResources>,
+    draw_cmd: FramedCommandList,
     dirty: bool,
 }
 
@@ -438,46 +505,76 @@ impl MisoScene {
         let mut rp = make_rp(ctx, &cfg);
 
         let mut s = Self {
-            ctx,
-            delete: Default::default(),
-            meshes: Default::default(),
-            materials: Default::default(),
-            renderables: Default::default(),
             dirty: false,
-            render_pass: make_rp(ctx, &cfg),
-            textures: ResourceList::new(1024),
-            bg_layouts: Default::default(),
+            global_res: GlobalResources {
+                ctx,
+                render_pass: rp,
+                ..Default::default()
+            },
+            frame: PerFrame::new(2),
+            draw_cmd: FramedCommandList::new(ctx, "[MISO] Main Draw Command List", 3),
         };
 
+        s.global_res.dynamic = ctx
+            .make_dynamic_allocator(&DynamicAllocatorInfo {
+                debug_name: "[MISO] Per-Object Dynamic Allocator",
+                usage: BufferUsage::ALL,
+                num_allocations: 16000,
+                byte_size: 16000 * 256,
+            })
+            .unwrap();
+
+        s.make_per_frame_attachments(&cfg);
         s.make_bind_group_layouts();
+        s.make_display(&cfg);
         s.make_cameras(&cfg);
         s.make_pipelines(&cfg);
         s
     }
+
     fn make_cameras(&mut self, cfg: &json::Config) {
         for pipe in &cfg.passes {}
     }
 
-    fn load_shader_from_file(path: &str) -> Vec<u32> {
-        // Open the file
-        let mut file = File::open(path).unwrap();
+    fn make_per_frame_attachments(&mut self, cfg: &json::Config) {
+        let ctx = self.global_res.ctx;
+        self.frame.for_each_mut(|f| {
+            for subpass in &cfg.render_pass.subpasses {
+                let mut colors = Vec::new();
+                let mut depth = None;
 
-        // Read the file into a byte buffer
-        let mut buffer = Vec::new();
-        file.read_to_end(&mut buffer).unwrap();
+                for attach in &subpass.attachments {
+                    let full_name = format!("{}.{}", subpass.name, attach.name);
+                    let (img, view) = create_view_from_attachment(unsafe { &mut *(ctx) }, attach);
+                    match attach.kind.to_lowercase().as_str() {
+                        "color" => {
+                            colors.push(Attachment {
+                                img: view,
+                                clear_color: Default::default(),
+                            });
+                        }
+                        "depth" => {
+                            depth = Some(Attachment {
+                                img: view,
+                                clear_color: Default::default(),
+                            });
+                        }
+                        _ => {}
+                    }
 
-        // Ensure the byte buffer's length is a multiple of 4
-        assert!(buffer.len() % 4 == 0);
+                    if full_name == cfg.display.input {
+                        f.out_image = view;
+                    }
+                }
+                f.subpasses.push(SubpassAttachments {
+                    name: subpass.name.clone(),
+                    colors,
+                    depth,
+                });
+            }
 
-        // Convert the byte buffer into a Vec<u32>
-        let word_count = buffer.len() / 4;
-        let mut byte_code = Vec::with_capacity(word_count);
-        for chunk in buffer.chunks_exact(4) {
-            let word = u32::from_le_bytes(chunk.try_into().unwrap());
-            byte_code.push(word);
-        }
-
-        byte_code
+            f.sems = unsafe { &mut *(ctx) }.make_semaphores(64).unwrap();
+        });
     }
 
     fn make_bind_group_layouts(&mut self) {
@@ -488,84 +585,66 @@ impl MisoScene {
                 debug_name: "[MISO] Bindless Bind Group Layout",
                 shaders: &[ShaderInfo {
                     shader_type: ShaderType::All,
-                    variables: &[BindGroupVariable {
-                        var_type: BindGroupVariableType::SampledImage,
-                        binding: 0,
-                    }],
+                    variables: &[
+                        BindGroupVariable {
+                            var_type: BindGroupVariableType::SampledImage,
+                            binding: 10,
+                        },
+                        BindGroupVariable {
+                            var_type: BindGroupVariableType::DynamicUniform,
+                            binding: 11,
+                        },
+                    ],
                 }],
             })
             .unwrap();
 
-        // Global Bindings. These describe the environment, rendering settings, etc.
-        let per_pipeline = self
-            .get_ctx()
-            .make_bind_group_layout(&BindGroupLayoutInfo {
-                debug_name: "[MISO] Global Bind Group Layout",
-                shaders: &[ShaderInfo {
-                    shader_type: ShaderType::All,
-                    variables: &[BindGroupVariable {
-                        var_type: BindGroupVariableType::Uniform,
-                        binding: 1,
-                    }],
-                }],
-            })
-            .unwrap();
-
-        // Bindings for per-frame data. Camera, transformations, etc.
-        let per_frame = self
-            .get_ctx()
-            .make_bind_group_layout(&BindGroupLayoutInfo {
-                debug_name: "[MISO] Per-Frame Bind Group Layout",
-                shaders: &[ShaderInfo {
-                    shader_type: ShaderType::All,
-                    variables: &[BindGroupVariable {
-                        var_type: BindGroupVariableType::Uniform,
-                        binding: 2,
-                    }],
-                }],
-            })
-            .unwrap();
-
-        // Bindings per render. These should be just dynamic buffer data.
-        let per_object = self
-            .get_ctx()
-            .make_bind_group_layout(&BindGroupLayoutInfo {
-                debug_name: "[MISO] Per-Frame Bind Group Layout",
-                shaders: &[ShaderInfo {
-                    shader_type: ShaderType::All,
-                    variables: &[BindGroupVariable {
-                        var_type: BindGroupVariableType::DynamicUniform,
-                        binding: 3,
-                    }],
-                }],
-            })
-            .unwrap();
-
-        self.bg_layouts = MisoBGLayouts {
+        self.global_res.bg_layouts = MisoBGLayouts {
             bindless,
-            per_pipeline,
-            per_frame,
-            per_object,
+            per_pipeline: Default::default(),
+            per_frame: Default::default(),
+            per_object: Default::default(),
         };
     }
 
+    fn make_display(&mut self, cfg: &json::Config) {
+        self.global_res.display = Some(
+            self.get_ctx()
+                .make_display(&DisplayInfo {
+                    window: WindowInfo {
+                        title: cfg.display.name.clone(),
+                        size: cfg.display.size,
+                        resizable: false,
+                    },
+                    vsync: false,
+                    buffering: dashi::WindowBuffering::Triple,
+                })
+                .unwrap(),
+        );
+    }
+
     fn make_pipelines(&mut self, cfg: &json::Config) {
+        //        let stdvert = include_spirv!("a.spv");
         let stdvert = include_spirv!("target/spirv/stdvert.spv");
-        let stdfrag = include_spirv!("target/spirv/stdvert.spv");
+        let stdfrag = include_spirv!("target/spirv/stdfrag.spv");
 
         for pipe in &cfg.passes {
             let (vshader, pshader) = match pipe.graphics.as_str() {
                 "standard" => (stdvert.as_slice(), stdfrag.as_slice()),
                 _ => todo!(),
             };
-            let bg_layouts = [
-                Some(self.bg_layouts.bindless),
-                Some(self.bg_layouts.per_pipeline),
-                Some(self.bg_layouts.per_frame),
-                Some(self.bg_layouts.per_object),
-            ];
 
-            let rp = self.render_pass.handle.clone();
+            let mut reflection = reflection::ShaderInspector::new(&[vshader, pshader]).unwrap();
+
+            let bindless_textures_details = reflection.get_binding_details("bless_textures");
+            let dynamic_details = reflection.get_binding_details("per_obj");
+            let mut bg_layouts = [None, None, None, None];
+
+            if bindless_textures_details.is_some() || dynamic_details.is_some() {
+                bg_layouts[0] = Some(self.global_res.bg_layouts.bindless);
+            }
+
+            let rp = self.global_res.render_pass.handle.clone();
             let subpass_info = cfg.render_pass.subpasses[pipe.subpass as usize].clone();
             let has_depth = subpass_info
                 .attachments
@@ -604,27 +683,27 @@ impl MisoScene {
                             VertexEntryInfo {
                                 format: dashi::ShaderPrimitiveType::Vec4,
                                 location: 0,
-                                offset: 0,
+                                offset: std::mem::offset_of!(Vertex, position),
                             },
                             VertexEntryInfo {
                                 format: dashi::ShaderPrimitiveType::Vec4,
                                 location: 1,
-                                offset: 0 + 16,
+                                offset: std::mem::offset_of!(Vertex, normal),
                             },
                             VertexEntryInfo {
                                 format: dashi::ShaderPrimitiveType::Vec2,
                                 location: 2,
-                                offset: 0 + 16 + 16,
+                                offset: std::mem::offset_of!(Vertex, tex_coords),
                             },
                             VertexEntryInfo {
                                 format: dashi::ShaderPrimitiveType::Vec4,
                                 location: 3,
-                                offset: 0 + 16 + 16 + 8,
+                                offset: std::mem::offset_of!(Vertex, joint_ids),
                             },
                             VertexEntryInfo {
                                 format: dashi::ShaderPrimitiveType::Vec4,
                                 location: 4,
-                                offset: 0 + 16 + 16 + 8 + 16,
+                                offset: std::mem::offset_of!(Vertex, joints),
                             },
                         ],
                         stride: std::mem::size_of::<Vertex>(),
@@ -663,8 +742,10 @@ impl MisoScene {
                 })
                 .unwrap();
 
-            self.render_pass.subpasses.push(MisoSubpass {
+            self.global_res.render_pass.subpasses.push(MisoSubpass {
                 name: pipe.name.clone(),
+                reflection,
+                bg_layouts,
                 pipeline: Pipeline {
                     gfx_layout: layout,
                     gfx: pipeline,
@@ -676,7 +757,7 @@ impl MisoScene {
     }
 
     pub fn register_texture(&mut self, info: &TextureInfo) -> Handle<Texture> {
-        return self.textures.push(Texture {
+        return self.global_res.textures.push(Texture {
             handle: info.image,
             sampler: info.sampler,
             dim: info.dim,
@@ -685,7 +766,7 @@ impl MisoScene {
     }
 
     pub fn unregister_texture(&mut self, h: Handle<Texture>) {
-        self.textures.release(h);
+        self.global_res.textures.release(h);
     }
 
     pub fn register_camera(&mut self, info: &CameraInfo) -> Handle<Camera> {
@@ -699,7 +780,8 @@ impl MisoScene {
     pub fn register_mesh(&mut self, info: &MeshInfo) -> Handle<Mesh> {
         self.dirty = true;
 
-        self.meshes
+        self.global_res
+            .meshes
             .insert(Mesh {
                 vertices: info.vertices,
                 indices: info.indices,
@@ -721,65 +803,98 @@ impl MisoScene {
 
     pub fn unregister_mesh(&mut self, handle: Handle<Mesh>) {
         self.dirty = true;
-        self.meshes.release(handle);
+        self.global_res.meshes.release(handle);
     }
 
     pub fn register_material(&mut self, info: &MaterialInfo) -> Handle<Material> {
         self.dirty = true;
-        self.materials
+        self.global_res
+            .materials
             .insert(Material {
-                base_color: info.base_color,
-                normal: info.normal,
+                data: MaterialShaderData {
+                    base_color: info.base_color,
+                    normal: info.normal,
+                },
+                passes: info.passes.clone(),
             })
             .unwrap()
     }
 
     pub fn unregister_material(&mut self, handle: Handle<Material>) {
         self.dirty = true;
-        self.materials.release(handle);
+        self.global_res.materials.release(handle);
     }
 
     pub fn register_object(&mut self, info: &ObjectInfo) -> Handle<Renderable> {
-        self.renderables
+        let h = self
+            .global_res
+            .renderables
             .insert(Renderable {
                 mesh: info.mesh,
                 material: info.material,
                 transform: info.transform,
             })
-            .unwrap()
+            .unwrap();
+
+        let mat = self.global_res.materials.get_ref(info.material).unwrap();
+        for subpass in &mut self.global_res.render_pass.subpasses {
+            for name in &mat.passes {
+                if subpass.name == name.as_str() {
+                    let po = subpass.objects.insert(PassObject { original: h }).unwrap();
+                    subpass.non_batched.push(MisoBatch {
+                        handle: po,
+                        sort_key: 0,
+                    });
+                }
+            }
+        }
+
+        h
     }
 
     pub fn unregister_object(&mut self, handle: Handle<Renderable>) {
-        self.renderables.release(handle);
+        self.global_res.renderables.release(handle);
     }
 
     fn get_ctx(&mut self) -> &mut Context {
-        unsafe { &mut *(self.ctx) }
+        unsafe { &mut *(self.global_res.ctx) }
     }
 
     fn reconfigure_scene(&mut self) {
-        const BINDLESS_SET: u32 = 0;
+        const BINDLESS_SET: u32 = 10;
         let mut bindings = Vec::new();
-        self.textures.for_each_handle(|h| {
-            let t = self.textures.get_ref(h);
+        self.global_res.textures.for_each_handle(|h| {
+            let t = self.global_res.textures.get_ref(h);
             bindings.push(IndexedResource {
                 resource: ShaderResource::SampledImage(t.view, t.sampler),
                 slot: h.slot as u32,
             });
         });
 
-        let bindless = self.bg_layouts.bindless;
-        let bg = self
-            .get_ctx()
-            .make_indexed_bind_group(&IndexedBindGroupInfo {
-                debug_name: "[MISO] Bindless Bind Group",
-                layout: bindless,
-                bindings: &[IndexedBindingInfo {
-                    resources: &bindings,
-                    binding: 0,
-                }],
-                set: BINDLESS_SET,
-            });
+        let bindless = self.global_res.bg_layouts.bindless;
+        let resource = ShaderResource::Dynamic(&self.global_res.dynamic);
+        let ctx = self.global_res.ctx;
+        let bg = unsafe {
+            (*(ctx))
+                .make_indexed_bind_group(&IndexedBindGroupInfo {
+                    debug_name: "[MISO] Bindless Bind Group",
+                    layout: bindless,
+                    bindings: &[
+                        IndexedBindingInfo {
+                            resources: &bindings,
+                            binding: 10,
+                        },
+                        IndexedBindingInfo {
+                            resources: &[IndexedResource { resource, slot: 0 }],
+                            binding: 11,
+                        },
+                    ],
+                    set: BINDLESS_SET,
+                })
+                .unwrap()
+        };
+
+        self.global_res.bindless = bg;
     }
 
     pub fn update(&mut self) {
@@ -788,6 +903,95 @@ impl MisoScene {
             self.dirty = false;
         }
 
-        self.delete.tex.delete_all();
+        const WIDTH: u32 = 1280;
+        const HEIGHT: u32 = 1024;
+
+        self.frame.curr_mut().delete_queue.tex.delete_all();
+        let ctx = self.global_res.ctx;
+        let (img, sem, _idx, _good) = unsafe { &mut *(ctx) }
+            .acquire_new_image(&mut self.global_res.display.as_mut().unwrap())
+            .unwrap();
+
+        self.global_res.dynamic.reset();
+        let curr_frame = self.frame.curr();
+        self.draw_cmd.record(|list| {
+            for (i, pass) in self.global_res.render_pass.subpasses.iter().enumerate() {
+                println!("1");
+                list.begin_drawing(&DrawBegin {
+                    viewport: Viewport {
+                        area: FRect2D {
+                            w: WIDTH as f32,
+                            h: HEIGHT as f32,
+                            ..Default::default()
+                        },
+                        scissor: Rect2D {
+                            w: WIDTH,
+                            h: HEIGHT,
+                            ..Default::default()
+                        },
+                        ..Default::default()
+                    },
+                    pipeline: pass.pipeline.gfx,
+                    subpass: Subpass {
+                        colors: &curr_frame.subpasses[0].colors,
+                        depth: curr_frame.subpasses[0].depth.clone(),
+                    },
+                })
+                .expect("Error beginning render pass!");
+
+                for batch in &pass.non_batched {
+                    println!("a");
+                    let p = pass.objects.get_ref(batch.handle).unwrap();
+                    let renderable = self.global_res.renderables.get_ref(p.original).unwrap();
+                    let mesh = self.global_res.meshes.get_ref(renderable.mesh).unwrap();
+                    let material = self
+                        .global_res
+                        .materials
+                        .get_ref(renderable.material)
+                        .unwrap();
+
+                    let alloc = self.global_res.dynamic.bump().unwrap();
+
+                    list.draw_indexed(&DrawIndexed {
+                        vertices: mesh.vertices,
+                        indices: mesh.indices,
+                        dynamic_buffers: [Some(alloc), None, None, None],
+                        bind_groups: [Some(self.global_res.bindless.clone()), None, None, None],
+                        index_count: mesh.num_indices,
+                        instance_count: 1,
+                        first_instance: 0,
+                    });
+
+                    println!("b");
+                }
+
+                println!("2");
+                list.end_drawing().expect("Error ending render pass!");
+            }
+
+            // Blit the framebuffer to the display's image
+            list.blit(ImageBlit {
+                src: self.frame.curr().out_image,
+                dst: img,
+                filter: Filter::Nearest,
+                ..Default::default()
+            });
+        });
+
+        // Submit our recorded commands
+        self.draw_cmd.submit(&SubmitInfo {
+            wait_sems: &[sem],
+            signal_sems: &[self.frame.curr().sems[0], self.frame.curr().sems[1]],
+            ..Default::default()
+        });
+
+        unsafe { &mut *(ctx) }
+            .present_display(
+                self.global_res.display.as_mut().unwrap(),
+                &[self.frame.curr().sems[0], self.frame.curr().sems[1]],
+            )
+            .unwrap();
+
+        self.frame.advance_next_frame();
     }
 }

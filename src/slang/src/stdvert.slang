@@ -1,9 +1,6 @@
 // Vertex Shader (vertex.slang)
-[[vk::binding(0)]]
-cbuffer Transform : register(b0)
-{
-    float4x4 modelViewProjection;
-};
+import bindless;
+import miso;
 
 struct VSInput
 {
@@ -21,7 +18,7 @@ struct VSOutput
 VSOutput main(VSInput input)
 {
     VSOutput output;
-    output.position = mul(modelViewProjection, float4(input.position, 1.0));
+    output.position = mul(per_obj.transform, float4(input.position.xyz, 1.0));
     output.color = input.color;
     return output;
 }
