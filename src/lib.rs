@@ -259,7 +259,8 @@ pub struct MaterialInfo {
     pub normal: Handle<Texture>,
 }
 
-#[derive(Default)]
+#[derive(Default, Clone, Copy)]
+#[repr(C)]
 pub struct MaterialShaderData {
     base_color: Handle<Texture>,
     normal: Handle<Texture>,
@@ -521,6 +522,7 @@ impl MisoScene {
                 usage: BufferUsage::ALL,
                 num_allocations: 16000,
                 byte_size: 16000 * 256,
+                ..Default::default()
             })
             .unwrap();
 
@@ -556,7 +558,7 @@ impl MisoScene {
                         "depth" => {
                             depth = Some(Attachment {
                                 img: view,
-                                clear_color: Default::default(),
+                                clear_color: [1.0, 1.0, 1.0, 1.0],
                             });
                         }
                         _ => {}
@@ -916,7 +918,6 @@ impl MisoScene {
         let curr_frame = self.frame.curr();
         self.draw_cmd.record(|list| {
             for (i, pass) in self.global_res.render_pass.subpasses.iter().enumerate() {
-                println!("1");
                 list.begin_drawing(&DrawBegin {
                     viewport: Viewport {
                         area: FRect2D {
@@ -940,7 +941,6 @@ impl MisoScene {
                 .expect("Error beginning render pass!");
 
                 for batch in &pass.non_batched {
-                    println!("a");
                     let p = pass.objects.get_ref(batch.handle).unwrap();
                     let renderable = self.global_res.renderables.get_ref(p.original).unwrap();
                     let mesh = self.global_res.meshes.get_ref(renderable.mesh).unwrap();
@@ -950,8 +950,18 @@ impl MisoScene {
                         .get_ref(renderable.material)
                         .unwrap();
 
-                    let alloc = self.global_res.dynamic.bump().unwrap();
+                    #[repr(C)]
+                    struct PerFrameInfo {
+                       transform: Mat4,
+                       material: MaterialShaderData,
+                       fid: u32,
+                    }
 
+
+                    let mut alloc = self.global_res.dynamic.bump().unwrap();
+                    let info = &mut alloc.slice::<PerFrameInfo>()[0];
+                    info.material = material.data;
+                    info.transform = Mat4::IDENTITY;
                     list.draw_indexed(&DrawIndexed {
                         vertices: mesh.vertices,
                         indices: mesh.indices,
@@ -962,10 +972,8 @@ impl MisoScene {
                         first_instance: 0,
                     });
 
-                    println!("b");
                 }
 
-                println!("2");
                 list.end_drawing().expect("Error ending render pass!");
             }
 

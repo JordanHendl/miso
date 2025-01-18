@@ -7,8 +7,8 @@ struct Handle {
     return m_id != 65535;
   }
 
-  uint16_t id() {
-    return m_id;
+  int32_t id() {
+    return (int32_t)m_id;
   }
 }
 }
