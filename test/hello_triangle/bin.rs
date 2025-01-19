@@ -1,5 +1,71 @@
 use dashi::*;
 use sdl2::{event::Event, keyboard::Keycode};
+use std::time::{Duration, Instant};
+pub struct Timer {
+    start_time: Option<Instant>,
+    elapsed: Duration,
+    is_paused: bool,
+}
+
+impl Timer {
+    // Create a new timer instance
+    pub fn new() -> Timer {
+        Timer {
+            start_time: None,
+            elapsed: Duration::new(0, 0),
+            is_paused: false,
+        }
+    }
+
+    // Start the timer
+    pub fn start(&mut self) {
+        if self.start_time.is_none() {
+            self.start_time = Some(Instant::now());
+        } else if self.is_paused {
+            // Resume from where it was paused
+            self.start_time = Some(Instant::now() - self.elapsed);
+            self.is_paused = false;
+        }
+    }
+
+    // Stop the timer
+    pub fn stop(&mut self) {
+        if let Some(start_time) = self.start_time {
+            self.elapsed = start_time.elapsed();
+            self.start_time = None;
+            self.is_paused = false;
+        }
+    }
+
+    // Pause the timer
+    pub fn pause(&mut self) {
+        if let Some(start_time) = self.start_time {
+            self.elapsed = start_time.elapsed();
+            self.is_paused = true;
+            self.start_time = None;
+        }
+    }
+
+    // Reset the timer
+    pub fn reset(&mut self) {
+        self.start_time = None;
+        self.elapsed = Duration::new(0, 0);
+        self.is_paused = false;
+    }
+
+    // Get the current elapsed time in milliseconds
+    pub fn elapsed_ms(&self) -> u128 {
+        if let Some(start_time) = self.start_time {
+            if self.is_paused {
+                self.elapsed.as_millis()
+            } else {
+                start_time.elapsed().as_millis()
+            }
+        } else {
+            self.elapsed.as_millis()
+        }
+    }
+}
 
 pub struct ImageLoadInfo<T> {
     pub filename: String,
@@ -67,7 +133,7 @@ pub fn load_image_rgba8(path: &str) -> ImageLoadInfo<u8> {
 
 #[cfg(feature = "miso-tests")]
 fn main() {
-    use glam::vec4;
+    use glam::{vec2, vec3, vec4, Mat4};
     use miso::{MaterialInfo, MeshInfo, ObjectInfo, Vertex};
 
     let cfg = format!("{}/cfg/render_graph.json", env!("CARGO_MANIFEST_DIR"));
@@ -76,6 +142,9 @@ fn main() {
     let mut ctx = dashi::Context::new(&Default::default()).unwrap();
     let mut scene = miso::MisoScene::new(&mut ctx, &miso::MisoSceneInfo { cfg: cfg.clone() });
     let mut event_pump = ctx.get_sdl_ctx().event_pump().unwrap();
+    let mut timer = Timer::new();
+
+    timer.start();
 
     let VERTICES: [Vertex; 3] = [
         Vertex {
@@ -140,6 +209,7 @@ fn main() {
         transform: Default::default(),
     });
 
+    let mut t = Mat4::default();
     'running: loop {
         // Listen to events
         for event in event_pump.poll_iter() {
@@ -155,6 +225,13 @@ fn main() {
             }
         }
 
+        let pos = vec3(
+            (timer.elapsed_ms() as f32 / 1000.0).sin() * 0.5,
+            (timer.elapsed_ms() as f32 / 1000.0).cos() * 0.5,
+            0.0,
+        );
+
+        scene.update_object_transform(object, &Mat4::from_translation(pos));
         scene.update();
     }
     //

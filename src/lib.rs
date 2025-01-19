@@ -284,9 +284,16 @@ pub struct Renderable {
     transform: Mat4,
 }
 
-pub struct CameraInfo {}
+pub struct CameraInfo<'a> {
+    pass: &'a str,
+    transform: Mat4,
+    projection: Mat4,
+}
 
-pub struct Camera {}
+pub struct Camera {
+    transform: Mat4,
+    projection: Mat4,
+}
 
 #[derive(Default)]
 struct PassObject {
@@ -329,6 +336,7 @@ struct Pipeline {
 struct MisoSubpass {
     name: String,
     pipeline: Pipeline,
+    camera: Handle<Camera>,
     per_pipeline_bg: Handle<BindGroup>,
     non_batched: Vec<MisoBatch>,
     objects: Pool<PassObject>,
@@ -772,11 +780,26 @@ impl MisoScene {
     }
 
     pub fn register_camera(&mut self, info: &CameraInfo) -> Handle<Camera> {
-        todo!()
+        let h = self.global_res.cameras.push(Camera {
+            transform: info.transform,
+            projection: info.projection,
+        });
+
+        for pass in &mut self.global_res.render_pass.subpasses {
+            if &pass.name == info.pass {
+                pass.camera = h;
+            }
+        }
+
+        h
+    }
+
+    pub fn update_camera_transform(&mut self, h: Handle<Camera>, transform: &Mat4) {
+        self.global_res.cameras.get_ref_mut(h).transform = *transform;
     }
 
     pub fn unregister_camera(&mut self, h: Handle<Camera>) {
-        todo!()
+        self.global_res.cameras.release(h);
     }
 
     pub fn register_mesh(&mut self, info: &MeshInfo) -> Handle<Mesh> {
@@ -852,6 +875,14 @@ impl MisoScene {
         }
 
         h
+    }
+
+    pub fn update_object_transform(&mut self, handle: Handle<Renderable>, transform: &Mat4) {
+        self.global_res
+            .renderables
+            .get_mut_ref(handle)
+            .unwrap()
+            .transform = *transform;
     }
 
     pub fn unregister_object(&mut self, handle: Handle<Renderable>) {
@@ -940,6 +971,13 @@ impl MisoScene {
                 })
                 .expect("Error beginning render pass!");
 
+                let viewproj = if pass.camera.valid() {
+                    let l = self.global_res.cameras.get_ref(pass.camera);
+                    l.transform * l.projection
+                } else {
+                    Mat4::default()
+                };
+
                 for batch in &pass.non_batched {
                     let p = pass.objects.get_ref(batch.handle).unwrap();
                     let renderable = self.global_res.renderables.get_ref(p.original).unwrap();
@@ -952,16 +990,15 @@ impl MisoScene {
 
                     #[repr(C)]
                     struct PerFrameInfo {
-                       transform: Mat4,
-                       material: MaterialShaderData,
-                       fid: u32,
+                        transform: Mat4,
+                        material: MaterialShaderData,
+                        fid: u32,
                     }
-
 
                     let mut alloc = self.global_res.dynamic.bump().unwrap();
                     let info = &mut alloc.slice::<PerFrameInfo>()[0];
                     info.material = material.data;
-                    info.transform = Mat4::IDENTITY;
+                    info.transform = viewproj * renderable.transform;
                     list.draw_indexed(&DrawIndexed {
                         vertices: mesh.vertices,
                         indices: mesh.indices,
@@ -971,7 +1008,6 @@ impl MisoScene {
                         instance_count: 1,
                         first_instance: 0,
                     });
-
                 }
 
                 list.end_drawing().expect("Error ending render pass!");
