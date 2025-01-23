@@ -138,9 +138,19 @@ fn main() {
 
     let cfg = format!("{}/cfg/render_graph.json", env!("CARGO_MANIFEST_DIR"));
     let img = format!("{}/test/assets/default.png", env!("CARGO_MANIFEST_DIR"));
+    let device = DeviceSelector::new()
+        .unwrap()
+        .select(DeviceFilter::default().add_required_type(DeviceType::Dedicated))
+        .unwrap_or_default();
 
-    let mut ctx = dashi::Context::new(&Default::default()).unwrap();
-    let mut scene = miso::MisoScene::new(&mut ctx, &miso::MisoSceneInfo { cfg: cfg.clone() });
+    println!("Using device {}", device);
+
+    let mut ctx = dashi::Context::new(&ContextInfo {
+        device,
+        ..Default::default()
+    })
+    .unwrap();
+    let mut scene = miso::MisoScene::new(&mut ctx, &miso::MisoSceneInfo { cfg: Some(cfg.clone()) });
     let mut event_pump = ctx.get_sdl_ctx().event_pump().unwrap();
     let mut timer = Timer::new();
 

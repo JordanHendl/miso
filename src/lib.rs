@@ -222,7 +222,7 @@ fn create_view_from_attachment(
 }
 
 pub struct MisoSceneInfo {
-    pub cfg: String,
+    pub cfg: Option<String>,
 }
 
 #[repr(C)]
@@ -509,7 +509,7 @@ pub struct MisoScene {
 
 impl MisoScene {
     pub fn new(ctx: &mut dashi::Context, info: &MisoSceneInfo) -> Self {
-        let json_data = fs::read_to_string(info.cfg.clone()).expect("Unable to read file");
+        let json_data = fs::read_to_string(info.cfg.as_ref().unwrap().clone()).expect("Unable to read file");
         let cfg: json::Config = serde_json::from_str(&json_data).unwrap();
         let mut rp = make_rp(ctx, &cfg);
 
