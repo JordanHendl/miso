@@ -30,7 +30,53 @@ mod json;
 mod pass;
 mod reflection;
 
-struct ResourceList<T> {
+const DEFAULT_CONFIG: &str = r##"{
+  "render_pass": {
+    "subpasses": [
+      {
+        "name": "main-pass",
+        "attachments": [
+          {
+            "name": "color",
+            "type": "Color",
+            "size": [1280, 1024]
+          },
+          {
+            "name": "depth",
+            "type": "Depth",
+            "size": [1280, 1024]
+          }
+        ]
+      }
+    ]
+  },
+  
+  "cameras": [ {
+      "name": "main-camera",
+      "transform": [1.0, 0.0, 0.0, 0.0,
+                    0.0, 1.0, 0.0, 0.0,
+                    0.0, 0.0, 1.0, 0.0,
+                    0.0, 0.0, 0.0, 1.0]
+    }
+  ],
+
+
+  "passes": [ {
+      "name": "non-transparent",
+      "camera": "main-camera",
+      "graphics": "standard",
+      "subpass": 0,
+      "render_masks": ["standard"]
+    }],
+
+  "display": {
+    "name": "Miso",
+    "size": [1280, 1024],
+    "input": "main-pass.color"
+  }
+}"##;
+
+pub struct ResourceList<T> {
     pub pool: Pool<T>,
     pub entries: Vec<Handle<T>>,
 }
@@ -509,8 +555,16 @@ pub struct MisoScene {
 
 impl MisoScene {
     pub fn new(ctx: &mut dashi::Context, info: &MisoSceneInfo) -> Self {
-        let json_data = fs::read_to_string(info.cfg.as_ref().unwrap().clone()).expect("Unable to read file");
-        let cfg: json::Config = serde_json::from_str(&json_data).unwrap();
+        let cfg: json::Config = if info.cfg.is_some() {
+            let json_data = fs::read_to_string(info.cfg.as_ref().unwrap().clone());
+            match json_data {
+                Ok(json) => serde_json::from_str(&json).unwrap(),
+                Err(_) => serde_json::from_str(&DEFAULT_CONFIG).unwrap(),
+            }
+        } else {
+            serde_json::from_str(&DEFAULT_CONFIG).unwrap()
+        };
+
         let mut rp = make_rp(ctx, &cfg);
 
         let mut s = Self {
