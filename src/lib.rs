@@ -272,7 +272,7 @@ pub struct MisoSceneInfo {
 }
 
 #[repr(C)]
-#[derive(Default)]
+#[derive(Debug, Default, Clone, Copy)]
 pub struct Vertex {
     pub position: Vec4,
     pub normal: Vec4,
