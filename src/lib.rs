@@ -6,19 +6,9 @@ use std::{
 };
 
 use common::Hotbuffer;
-use dashi::{
-    utils::{per_frame::PerFrame, Handle, Pool},
-    Attachment, AttachmentDescription, BindGroup, BindGroupInfo, BindGroupLayout,
-    BindGroupLayoutInfo, BindGroupVariable, BindGroupVariableType, BindlessBindGroupLayoutInfo,
-    Buffer, BufferUsage, CommandListInfo, Context, CullMode, Display, DisplayInfo, DrawBegin,
-    DrawIndexed, DynamicAllocator, DynamicAllocatorInfo, FRect2D, Filter, Format,
-    FramedCommandList, GraphicsPipeline, GraphicsPipelineDetails, GraphicsPipelineInfo,
-    GraphicsPipelineLayout, GraphicsPipelineLayoutInfo, Image, ImageBlit, ImageInfo, ImageView,
-    ImageViewInfo, IndexedBindGroupInfo, IndexedBindingInfo, IndexedResource, PipelineShaderInfo,
-    Rect2D, RenderPass, RenderPassInfo, Sampler, Semaphore, ShaderInfo, ShaderResource, ShaderType,
-    SubmitInfo, Subpass, SubpassDescription, VertexDescriptionInfo, VertexEntryInfo,
-    VertexOrdering, Viewport, WindowInfo,
-};
+use dashi::utils::{per_frame::PerFrame, Handle, Pool};
+
+use dashi::*;
 use glam::*;
 use inline_spirv::include_spirv;
 use pass::RenderManager;
@@ -66,7 +56,11 @@ const DEFAULT_CONFIG: &str = r##"{
       "camera": "main-camera",
       "graphics": "standard",
       "subpass": 0,
-      "render_masks": ["standard"]
+      "render_masks": ["standard"],
+      "depth_info": {
+        "should_write": true,
+        "should_test": true
+      }
     }],
 
   "display": {
@@ -276,6 +270,7 @@ pub struct MisoSceneInfo {
 pub struct Vertex {
     pub position: Vec4,
     pub normal: Vec4,
+    pub color: Vec4,
     pub tex_coords: Vec2,
     pub joint_ids: IVec4,
     pub joints: Vec4,
@@ -331,9 +326,9 @@ pub struct Renderable {
 }
 
 pub struct CameraInfo<'a> {
-    pass: &'a str,
-    transform: Mat4,
-    projection: Mat4,
+    pub pass: &'a str,
+    pub transform: Mat4,
+    pub projection: Mat4,
 }
 
 pub struct Camera {
@@ -755,18 +750,23 @@ impl MisoScene {
                                 offset: std::mem::offset_of!(Vertex, normal),
                             },
                             VertexEntryInfo {
-                                format: dashi::ShaderPrimitiveType::Vec2,
+                                format: dashi::ShaderPrimitiveType::Vec4,
                                 location: 2,
+                                offset: std::mem::offset_of!(Vertex, color),
+                            },
+                            VertexEntryInfo {
+                                format: dashi::ShaderPrimitiveType::Vec2,
+                                location: 3,
                                 offset: std::mem::offset_of!(Vertex, tex_coords),
                             },
                             VertexEntryInfo {
                                 format: dashi::ShaderPrimitiveType::Vec4,
-                                location: 3,
+                                location: 4,
                                 offset: std::mem::offset_of!(Vertex, joint_ids),
                             },
                             VertexEntryInfo {
                                 format: dashi::ShaderPrimitiveType::Vec4,
-                                location: 4,
+                                location: 5,
                                 offset: std::mem::offset_of!(Vertex, joints),
                             },
                         ],
@@ -840,12 +840,16 @@ impl MisoScene {
         });
 
         for pass in &mut self.global_res.render_pass.subpasses {
-            if &pass.name == info.pass {
+            if &pass.name == info.pass || info.pass == "ALL" {
                 pass.camera = h;
             }
         }
 
         h
+    }
+
+    pub fn update_camera_projection(&mut self, h: Handle<Camera>, transform: &Mat4) {
+        self.global_res.cameras.get_ref_mut(h).projection = *transform;
     }
 
     pub fn update_camera_transform(&mut self, h: Handle<Camera>, transform: &Mat4) {
@@ -918,7 +922,7 @@ impl MisoScene {
         let mat = self.global_res.materials.get_ref(info.material).unwrap();
         for subpass in &mut self.global_res.render_pass.subpasses {
             for name in &mat.passes {
-                if subpass.name == name.as_str() {
+                if subpass.name == name.as_str() || name.as_str() == "ALL" {
                     let po = subpass.objects.insert(PassObject { original: h }).unwrap();
                     subpass.non_batched.push(MisoBatch {
                         handle: po,
@@ -995,6 +999,8 @@ impl MisoScene {
 
         self.frame.curr_mut().delete_queue.tex.delete_all();
         let ctx = self.global_res.ctx;
+
+        assert!(self.global_res.display.is_some());
         let (img, sem, _idx, _good) = unsafe { &mut *(ctx) }
             .acquire_new_image(&mut self.global_res.display.as_mut().unwrap())
             .unwrap();
@@ -1027,10 +1033,11 @@ impl MisoScene {
 
                 let viewproj = if pass.camera.valid() {
                     let l = self.global_res.cameras.get_ref(pass.camera);
-                    l.transform * l.projection
+                    l.projection * l.transform
                 } else {
                     Mat4::default()
-                };
+                }
+                .transpose();
 
                 for batch in &pass.non_batched {
                     let p = pass.objects.get_ref(batch.handle).unwrap();

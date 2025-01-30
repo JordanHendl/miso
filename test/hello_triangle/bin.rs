@@ -150,7 +150,7 @@ fn main() {
         ..Default::default()
     })
     .unwrap();
-    let mut scene = miso::MisoScene::new(&mut ctx, &miso::MisoSceneInfo { cfg: Some(cfg.clone()) });
+    let mut scene = miso::MisoScene::new(&mut ctx, &miso::MisoSceneInfo { cfg: None });
     let mut event_pump = ctx.get_sdl_ctx().event_pump().unwrap();
     let mut timer = Timer::new();
 
