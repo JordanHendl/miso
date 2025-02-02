@@ -6,6 +6,7 @@ use glam::*;
 
 
 #[allow(dead_code)]
+#[repr(C)]
 pub struct GPUOption<T> {
     data: T,
     available: u32,
@@ -33,22 +34,23 @@ impl<T> Default for GPUOption<T> {
 }
 
 #[derive(Default)]
+#[repr(C)]
 pub struct DirectionalLightInfo {
     pub direction: Vec4,
     pub color: Vec4,
     pub intensity: f32,
 }
 
-#[repr(C)]
 #[derive(Default)]
+#[repr(C)]
 pub struct ShaderDirectionalLight {
     pub direction: Vec4,
     pub color: Vec4,
     pub intensity: f32,
 }
 
-#[repr(C)]
 #[derive(Default)]
+#[repr(C)]
 pub struct Light {
     pub(crate) dir: GPUOption<ShaderDirectionalLight>,
 }

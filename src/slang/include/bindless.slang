@@ -28,6 +28,7 @@ struct PerFrameInfo {
 // Dynamic per-frame data.
 struct PerObjectInfo  {
     float4x4 transform;          // Model matrix.
+    float4x4 viewproj;          // Model matrix.
     Material material;
 };
 

@@ -26,8 +26,8 @@ float4 process_lights(const FSInput i, float4 in_color) {
     
     if(light.dir_light.valid()) {
        float3 norm = i.normal;
-       float3 light_dir = -light.dir_light.get().direction.xyz;
-       float3 diff = max(dot(light_dir, norm), 0.0);
+       float3 light_dir = light.dir_light.get().direction.xyz;
+       float3 diff = max(dot(-light_dir, norm), 0.0);
        color = color.xyz * diff;
     }
   }

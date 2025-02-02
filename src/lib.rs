@@ -345,7 +345,7 @@ impl Scene {
         const BINDLESS_SET: u32 = 10;
 
         let mut bindings = Vec::new();
-
+        
         self.global_res.res.textures.for_each_handle(|h| {
             let t = self.global_res.res.textures.get_ref(h);
             bindings.push(IndexedResource {
@@ -410,6 +410,7 @@ impl Scene {
             .unwrap();
 
         self.draw_cmd.record_enumerated(|list, frame_idx| {
+            self.global_res.res.lights.lights.sync_up(list); 
             if frame_idx == 0 {
                 self.global_res.dynamic.reset();
             }
@@ -448,13 +449,15 @@ impl Scene {
                         #[repr(C)]
                         struct PerFrameInfo {
                             transform: Mat4,
+                            viewproj: Mat4,
                             material: MaterialShaderData,
                         }
 
                         let mut alloc = self.global_res.dynamic.bump().unwrap();
                         let info = &mut alloc.slice::<PerFrameInfo>()[0];
                         info.material = material.data;
-                        info.transform = (viewproj * renderable.transform).transpose();
+                        info.viewproj = viewproj.transpose();
+                        info.transform = (renderable.transform).transpose();
                         list.draw_indexed(&DrawIndexed {
                             vertices: mesh.vertices,
                             indices: mesh.indices,

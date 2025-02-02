@@ -35,4 +35,8 @@ out_dir = "target/spirv"
 name = "hello_triangle"
 path = "test/hello_triangle/bin.rs"
 
+[[bin]]
+name = "hello_lights"
+path = "test/hello_lights/bin.rs"
+
 [lib]
