@@ -296,17 +296,34 @@ pub struct Mesh {
 pub struct MaterialInfo {
     pub name: String,
     pub passes: Vec<String>,
+    pub base_color_factor: Vec4,
+    pub emissive_factor: Vec4,
     pub base_color: Handle<Texture>,
     pub normal: Handle<Texture>,
+    pub emissive: Handle<Texture>,
 }
 
 #[derive(Default, Clone, Copy)]
 #[repr(C)]
 pub struct MaterialShaderData {
+    base_color_factor: Vec4,
+    emissive_factor: Vec4,
     base_color: Handle<Texture>,
     normal: Handle<Texture>,
+    emissive: Handle<Texture>,
 }
 
+impl From<&MaterialInfo> for MaterialShaderData {
+    fn from(value: &MaterialInfo) -> Self {
+        Self {
+            base_color_factor: value.base_color_factor,
+            emissive_factor: value.emissive_factor,
+            base_color: value.base_color,
+            normal: value.normal,
+            emissive: value.emissive,
+        }
+    }
+}
 #[derive(Default)]
 pub struct Material {
     data: MaterialShaderData,
@@ -894,10 +911,7 @@ impl MisoScene {
         self.global_res
             .materials
             .insert(Material {
-                data: MaterialShaderData {
-                    base_color: info.base_color,
-                    normal: info.normal,
-                },
+                data: info.into(),
                 passes: info.passes.clone(),
             })
             .unwrap()

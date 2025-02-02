@@ -1,8 +1,11 @@
 import handle;
 
 struct Material {
+  float4 base_color_factor;
+  float4 emissive_factor;
   miso::Handle base_color;
   miso::Handle normal;
+  miso::Handle emissive;
 }
 
 // Bindless textures (all available textures).

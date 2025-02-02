@@ -66,6 +66,7 @@ fn main() {
             .arg("-fspv-reflect")
             .arg("-force-glsl-scalar-layout")
             .arg("-fvk-use-gl-layout")
+            .arg("-fvk-invert-y")
 //            .arg("-emit-spirv-via-glsl")
             .arg("-Xdxc")
             .arg("--reflect-all-block-variables")
