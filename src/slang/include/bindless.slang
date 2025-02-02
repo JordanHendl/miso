@@ -33,7 +33,7 @@ struct PerObjectInfo  {
 
 
 
-[[vk::binding(10)]] uniform TextureSamplerPair bless_textures[];
+[[vk::binding(10)]] StructuredBuffer<TextureSamplerPair> bless_textures[];
 [[vk::binding(11)]] uniform ConstantBuffer<PerObjectInfo> per_obj;
 
 //uniform ConstantBuffer<GlobalInfo> global;

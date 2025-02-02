@@ -1,8 +1,0 @@
-struct MaterialManager {
-
-}
-
-struct RenderManager {
-
-}
-

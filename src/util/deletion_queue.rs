@@ -13,6 +13,7 @@ impl<T: Clone> Clone for DeletionQueue<T> {
     }
 }
 
+#[allow(dead_code)]
 impl<T> DeletionQueue<T> {
     /// Creates a new, empty `DeletionQueue`.
     pub fn new() -> Self {

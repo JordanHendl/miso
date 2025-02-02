@@ -136,7 +136,6 @@ fn main() {
     use glam::{vec2, vec3, vec4, Mat4};
     use miso::{MaterialInfo, MeshInfo, ObjectInfo, Vertex};
 
-    let cfg = format!("{}/cfg/render_graph.json", env!("CARGO_MANIFEST_DIR"));
     let img = format!("{}/test/assets/default.png", env!("CARGO_MANIFEST_DIR"));
     let device = DeviceSelector::new()
         .unwrap()
@@ -150,13 +149,13 @@ fn main() {
         ..Default::default()
     })
     .unwrap();
-    let mut scene = miso::MisoScene::new(&mut ctx, &miso::MisoSceneInfo { cfg: None });
+    let mut scene = miso::Scene::new(&mut ctx, &miso::SceneInfo { cfg: None });
     let mut event_pump = ctx.get_sdl_ctx().event_pump().unwrap();
     let mut timer = Timer::new();
 
     timer.start();
 
-    let VERTICES: [Vertex; 3] = [
+    let vert_buffer: [Vertex; 3] = [
         Vertex {
             position: vec4(0.0, -0.5, 0.0, 1.0),
             tex_coords: vec2(0.0, -0.5),
@@ -182,10 +181,10 @@ fn main() {
     let vertices = ctx
         .make_buffer(&BufferInfo {
             debug_name: "vertices",
-            byte_size: (VERTICES.len() * std::mem::size_of::<Vertex>()) as u32,
+            byte_size: (vert_buffer.len() * std::mem::size_of::<Vertex>()) as u32,
             visibility: MemoryVisibility::Gpu,
             usage: BufferUsage::VERTEX,
-            initial_data: unsafe { Some(VERTICES.align_to::<u8>().1) },
+            initial_data: unsafe { Some(vert_buffer.align_to::<u8>().1) },
         })
         .unwrap();
 
@@ -202,7 +201,7 @@ fn main() {
     let mesh = scene.register_mesh(&MeshInfo {
         name: "hello-triangle triangle".to_string(),
         vertices,
-        num_vertices: VERTICES.len(),
+        num_vertices: vert_buffer.len(),
         indices,
         num_indices: INDICES.len(),
     });
@@ -222,7 +221,6 @@ fn main() {
         transform: Default::default(),
     });
 
-    let t = Mat4::default();
     'running: loop {
         // Listen to events
         for event in event_pump.poll_iter() {
