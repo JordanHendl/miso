@@ -1,6 +1,6 @@
 use dashi::utils::Pool;
 
-use crate::{Camera, Material, Mesh, Renderable, ResourceList, Texture};
+use crate::{Camera, LightCollection, Material, Mesh, Renderable, ResourceList, Texture};
 
 #[derive(Default)]
 pub struct ResourceManager {
@@ -9,4 +9,5 @@ pub struct ResourceManager {
     pub materials: Pool<Material>,
     pub textures: ResourceList<Texture>,
     pub renderables: Pool<Renderable>,
+    pub lights: LightCollection,
 }

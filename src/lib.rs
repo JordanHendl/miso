@@ -156,6 +156,7 @@ impl Scene {
 
         //        s.make_per_frame_attachments(&cfg);
         s.make_display(&cfg);
+        s.global_res.res.lights = LightCollection::new(ctx);
         s
     }
 
@@ -264,6 +265,26 @@ impl Scene {
         self.global_res.res.materials.release(handle);
     }
 
+    pub fn register_directional_light(
+        &mut self,
+        info: &DirectionalLightInfo,
+    ) -> Handle<DirectionalLight> {
+        self.dirty = true;
+        return self
+            .global_res
+            .res
+            .lights
+            .lights
+            .insert(Light {
+                dir: GPUOption::new(info.into()),
+            })
+            .unwrap();
+    }
+
+    pub fn unregister_directional_light(&mut self, _handle: Handle<DirectionalLight>) {
+        todo!()
+    }
+
     pub fn register_object(&mut self, info: &ObjectInfo) -> Handle<Renderable> {
         let h = self
             .global_res
@@ -322,7 +343,9 @@ impl Scene {
 
     fn reconfigure_scene(&mut self) {
         const BINDLESS_SET: u32 = 10;
+
         let mut bindings = Vec::new();
+
         self.global_res.res.textures.for_each_handle(|h| {
             let t = self.global_res.res.textures.get_ref(h);
             bindings.push(IndexedResource {
@@ -332,7 +355,7 @@ impl Scene {
         });
 
         let bindless = self.global_res.render_pass.bg_layouts.bindless;
-        let resource = ShaderResource::Dynamic(&self.global_res.dynamic);
+        let resource = ShaderResource::DynamicStorage(&self.global_res.dynamic);
         let ctx = self.global_res.ctx;
         let bg = unsafe {
             (*(ctx))
@@ -345,8 +368,17 @@ impl Scene {
                             binding: 10,
                         },
                         IndexedBindingInfo {
-                            resources: &[IndexedResource { resource, slot: 0 }],
+                            resources: &[IndexedResource {
+                                resource: ShaderResource::StorageBuffer(
+                                    self.global_res.res.lights.lights.get_gpu_handle(),
+                                ),
+                                slot: 0,
+                            }],
                             binding: 11,
+                        },
+                        IndexedBindingInfo {
+                            resources: &[IndexedResource { resource, slot: 0 }],
+                            binding: 20,
                         },
                     ],
                     set: BINDLESS_SET,
@@ -417,7 +449,6 @@ impl Scene {
                         struct PerFrameInfo {
                             transform: Mat4,
                             material: MaterialShaderData,
-                            fid: u32,
                         }
 
                         let mut alloc = self.global_res.dynamic.bump().unwrap();

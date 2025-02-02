@@ -16,6 +16,8 @@ struct VSOutput
 {
     float4 position : SV_POSITION;
     float3 color : COLOR;
+    float3 pos;
+    float3 normal;
     float2 tex_coords;
 }
 
@@ -25,7 +27,9 @@ VSOutput main(VSInput input)
     VSOutput output;
     float4x4 t = transpose(per_obj.transform);
     output.position = mul(float4(input.position.xyz, 1.0), per_obj.transform);
+    output.pos = output.position.xyz;
     output.color = input.color.xyz;
+    output.normal = input.normal.xyz;
     output.tex_coords = input.tex_coords.xy;
     return output;
 }

@@ -25,8 +25,12 @@ fn make_bind_group_layouts(ctx: &mut dashi::Context) -> BindGroupLayouts {
                         binding: 10,
                     },
                     BindGroupVariable {
-                        var_type: BindGroupVariableType::DynamicUniform,
+                        var_type: BindGroupVariableType::Storage,
                         binding: 11,
+                    },
+                    BindGroupVariable {
+                        var_type: BindGroupVariableType::DynamicStorage,
+                        binding: 20,
                     },
                 ],
             }],
@@ -48,7 +52,11 @@ pub struct RenderPass {
 }
 
 impl RenderPass {
-    pub fn new(ctx: &mut dashi::Context, config: &json::Config, per_frame: &mut PerFrame<PerFrameResources>) -> Self {
+    pub fn new(
+        ctx: &mut dashi::Context,
+        config: &json::Config,
+        per_frame: &mut PerFrame<PerFrameResources>,
+    ) -> Self {
         let mut rp = RenderPass::make_rp(ctx, config);
         rp.register_bg_layouts();
         rp.make_pipelines(ctx, config);
@@ -59,7 +67,7 @@ impl RenderPass {
     fn register_bg_layouts(&mut self) {
         self.shader_cache.add_bg_layout(
             self.bg_layouts.bindless,
-            Arc::new(|info| info.name == "bless_textures" || info.name == "per_obj"),
+            Arc::new(|info| info.name == "bless_textures" || info.name == "per_obj_ssbo"),
         );
     }
 
@@ -71,12 +79,7 @@ impl RenderPass {
             for pass in &cfg_subpass.passes {
                 // This is safe. make_pipeline only mutates the shader cache, which is OK since it
                 // is not being concurrently accessed.
-                let p = pipeline::make_pipeline(
-                    ctx,
-                    unsafe { &mut (*ptr) },
-                    subpass,
-                    pass,
-                );
+                let p = pipeline::make_pipeline(ctx, unsafe { &mut (*ptr) }, subpass, pass);
 
                 let name = match pass {
                     json::Pass::Draw(gfx) => gfx.name.clone(),

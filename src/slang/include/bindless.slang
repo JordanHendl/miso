@@ -1,11 +1,12 @@
 import handle;
-
+import lights;
 struct Material {
   float4 base_color_factor;
   float4 emissive_factor;
   miso::Handle base_color;
   miso::Handle normal;
   miso::Handle emissive;
+  miso::Handle pad0;
 }
 
 // Bindless textures (all available textures).
@@ -28,13 +29,22 @@ struct PerFrameInfo {
 struct PerObjectInfo  {
     float4x4 transform;          // Model matrix.
     Material material;
-    float frameIndex;      // Current frame index for animations.
 };
 
 
 
-[[vk::binding(10)]] StructuredBuffer<TextureSamplerPair> bless_textures[];
-[[vk::binding(11)]] uniform ConstantBuffer<PerObjectInfo> per_obj;
+[[vk::binding(10)]] [[vk::combinedImageSampler]] uniform Texture2D bless_textures[];
+[[vk::binding(10)]] [[vk::combinedImageSampler]] uniform SamplerState bless_samplers[];
 
-//uniform ConstantBuffer<GlobalInfo> global;
-//uniform ConstantBuffer<PerFrameInfo> per_frame;
+[[vk::binding(11)]] uniform StructuredBuffer<miso::Light> bless_lights;
+
+
+layout(std430)
+[[vk::binding(20)]] uniform StructuredBuffer<PerObjectInfo> per_obj_ssbo;
+static PerObjectInfo per_obj = per_obj_ssbo[0];
+
+namespace miso {
+float4 sample_texture(uint idx, float2 coords) {
+  return bless_textures[idx].Sample(bless_samplers[idx], coords);  
+}
+}

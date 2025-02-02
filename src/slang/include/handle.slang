@@ -1,4 +1,5 @@
 namespace miso {
+
 struct Handle {
   uint16_t m_id;
   uint16_t m_gen;

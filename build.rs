@@ -57,6 +57,8 @@ fn main() {
         // Run the `slang` command.
         let status = Command::new("slangc")
             .arg(input_file)
+            .arg("-profile")
+            .arg("glsl_460")
             .arg("-target")
             .arg("spirv")
             .arg("-capability")

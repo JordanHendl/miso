@@ -55,8 +55,9 @@ pub struct MaterialInfo {
     pub emissive: Handle<Texture>,
 }
 
+#[allow(dead_code)]
 #[derive(Default, Clone, Copy)]
-#[repr(C)]
+#[repr(packed)]
 pub struct MaterialShaderData {
     pub(crate) base_color_factor: Vec4,
     pub(crate) emissive_factor: Vec4,
@@ -73,6 +74,7 @@ impl From<&MaterialInfo> for MaterialShaderData {
             base_color: value.base_color,
             normal: value.normal,
             emissive: value.emissive,
+            ..Default::default()
         }
     }
 }
