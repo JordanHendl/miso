@@ -69,7 +69,7 @@ mod tests {
             // SPIR-V binary 2 goes here...
         ];
 
-        let inspector = ShaderInspector::new(&[&spirv_data_1, &spirv_data_2])
+        let mut inspector = ShaderInspector::new(&[&spirv_data_1, &spirv_data_2])
             .expect("Failed to create inspector");
 
         // Check for a specific binding

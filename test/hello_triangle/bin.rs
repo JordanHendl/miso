@@ -159,14 +159,17 @@ fn main() {
     let VERTICES: [Vertex; 3] = [
         Vertex {
             position: vec4(0.0, -0.5, 0.0, 1.0),
+            tex_coords: vec2(0.0, -0.5),
             ..Default::default()
         }, // Vertex 0: Bottom
         Vertex {
             position: vec4(0.5, 0.5, 0.0, 1.0),
+            tex_coords: vec2(0.5, 0.5),
             ..Default::default()
         }, // Vertex 0: Bottom
         Vertex {
             position: vec4(-0.5, 0.5, 0.0, 1.0),
+            tex_coords: vec2(-0.5, 0.5),
             ..Default::default()
         }, // Vertex 0: Bottom
     ];
@@ -219,7 +222,7 @@ fn main() {
         transform: Default::default(),
     });
 
-    let mut t = Mat4::default();
+    let t = Mat4::default();
     'running: loop {
         // Listen to events
         for event in event_pump.poll_iter() {

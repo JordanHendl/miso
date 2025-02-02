@@ -1,17 +1,19 @@
 pub use sdl2::{event::Event, keyboard::Keycode};
 use std::{
     collections::{HashMap, VecDeque},
-    fs::{self, File},
-    io::Read,
+    fs::{self},
 };
 
-use common::Hotbuffer;
+mod deletion_queue;
+use deletion_queue::*;
+
+pub mod lights;
+pub use lights::*;
 use dashi::utils::{per_frame::PerFrame, Handle, Pool};
 
 use dashi::*;
 use glam::*;
 use inline_spirv::include_spirv;
-use pass::RenderManager;
 
 pub mod algorithm;
 mod common;
@@ -29,12 +31,12 @@ const DEFAULT_CONFIG: &str = r##"{
           {
             "name": "color",
             "type": "Color",
-            "size": [1280, 1024]
+            "size": [1280, 720]
           },
           {
             "name": "depth",
             "type": "Depth",
-            "size": [1280, 1024]
+            "size": [1280, 720]
           }
         ]
       }
@@ -65,7 +67,7 @@ const DEFAULT_CONFIG: &str = r##"{
 
   "display": {
     "name": "Miso",
-    "size": [1280, 1024],
+    "size": [1280, 720],
     "input": "main-pass.color"
   }
 }"##;
@@ -374,7 +376,7 @@ struct MisoMultiIndirectBatch {
 #[derive(Default)]
 struct MisoBatch {
     handle: Handle<PassObject>,
-    sort_key: u64,
+    _sort_key: u64,
 }
 
 #[derive(Default)]
@@ -439,61 +441,6 @@ struct RendererInfo {
     bindless_bg: Handle<BindGroup>,
 }
 
-#[derive(Default)]
-pub struct DeletionQueue<T> {
-    queue: VecDeque<Box<dyn FnOnce() -> T + Send + 'static>>,
-}
-
-impl<T: Clone> Clone for DeletionQueue<T> {
-    fn clone(&self) -> Self {
-        Self {
-            queue: Default::default(),
-        }
-    }
-}
-
-impl<T> DeletionQueue<T> {
-    /// Creates a new, empty `DeletionQueue`.
-    pub fn new() -> Self {
-        DeletionQueue {
-            queue: VecDeque::new(),
-        }
-    }
-
-    /// Adds a deletion operation to the queue.
-    ///
-    /// # Arguments
-    /// * `operation` - A closure or function that takes no arguments and returns a value of type `T`.
-    pub fn push<F>(&mut self, operation: F)
-    where
-        F: FnOnce() -> T + Send + 'static,
-    {
-        self.queue.push_back(Box::new(operation));
-    }
-
-    /// Processes all operations in the queue and clears it.
-    ///
-    /// Returns a `Vec<T>` containing the results of all processed operations.
-    pub fn delete_all(&mut self) -> Vec<T> {
-        let mut results = Vec::new();
-
-        while let Some(operation) = self.queue.pop_front() {
-            results.push(operation());
-        }
-
-        results
-    }
-
-    /// Checks if the queue is empty.
-    pub fn is_empty(&self) -> bool {
-        self.queue.is_empty()
-    }
-
-    /// Returns the number of operations currently in the queue.
-    pub fn len(&self) -> usize {
-        self.queue.len()
-    }
-}
 
 #[derive(Default, Clone)]
 struct Deletion {
@@ -577,7 +524,7 @@ impl MisoScene {
             serde_json::from_str(&DEFAULT_CONFIG).unwrap()
         };
 
-        let mut rp = make_rp(ctx, &cfg);
+        let rp = make_rp(ctx, &cfg);
 
         let mut s = Self {
             dirty: false,
@@ -940,7 +887,7 @@ impl MisoScene {
                     let po = subpass.objects.insert(PassObject { original: h }).unwrap();
                     subpass.non_batched.push(MisoBatch {
                         handle: po,
-                        sort_key: 0,
+                        ..Default::default()
                     });
                 }
             }
@@ -1047,11 +994,10 @@ impl MisoScene {
 
                 let viewproj = if pass.camera.valid() {
                     let l = self.global_res.cameras.get_ref(pass.camera);
-                    l.projection * l.transform
+                    l.projection*l.transform
                 } else {
                     Mat4::default()
-                }
-                .transpose();
+                };
 
                 for batch in &pass.non_batched {
                     let p = pass.objects.get_ref(batch.handle).unwrap();
@@ -1073,7 +1019,7 @@ impl MisoScene {
                     let mut alloc = self.global_res.dynamic.bump().unwrap();
                     let info = &mut alloc.slice::<PerFrameInfo>()[0];
                     info.material = material.data;
-                    info.transform = viewproj * renderable.transform;
+                    info.transform = (viewproj * renderable.transform).transpose();
                     list.draw_indexed(&DrawIndexed {
                         vertices: mesh.vertices,
                         indices: mesh.indices,

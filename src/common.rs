@@ -2,7 +2,6 @@ use dashi::utils::handle::Handle;
 use dashi::*;
 use dashi::{Buffer, BufferCopy, BufferInfo, CommandList, Context};
 use std::collections::HashMap;
-use std::fs;
 
 pub struct Hotbuffer {
     front: Handle<Buffer>,

@@ -1,6 +1,4 @@
-use rhai::{Engine, EvalAltResult};
 use std::collections::HashMap;
-use std::fs;
 use dashi::*;
 use dashi::utils::handle::Handle;
 use common::*;
