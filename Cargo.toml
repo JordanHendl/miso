@@ -3,25 +3,7 @@ name = "miso"
 version = "0.1.0"
 edition = "2021"
 
-[features]
-default = ["miso-tests"]
-miso-tests = ["dep:gltf", "dep:image"]
-
 [dependencies]
-glam = "0.29.0" 
-rhai = {git = "https://github.com/rhaiscript/rhai" }
-serde = {version = "1.0.210", features = ["derive"]}
-serde_json = "1.0.128"
-#dashi = {git = "https://github.com/JordanHendl/dashi", features = ["dashi-serde"]}
-dashi = {path = "C:/Program Files/Git/wksp/git/dashi", features = ["dashi-serde"]}
-#dashi = {path = "/wksp/git/dashi", features = ["dashi-serde"]}
-inline-spirv = {version = "0.2.1"}
-gltf = {version = "1.4.1", optional = true}
-image = {version = "0.24", optional = true}
-spirv-reflect = "0.2.2"
-spirv_cross = {version = "0.23.1", features = ["hlsl"]}
-sdl2 = {version = "0.37.0", features = ["bundled", "static-link", "raw-window-handle"]}
-[dev-dependencies]
 
 [build-dependencies]
 walkdir = "2.4.0"
@@ -30,13 +12,5 @@ walkdir = "2.4.0"
 # Defaults for SLANG_SRC_DIR and SLANG_OUT_DIR
 src_dir = "src/slang/src"
 out_dir = "target/spirv"
-
-[[bin]]
-name = "hello_triangle"
-path = "test/hello_triangle/bin.rs"
-
-[[bin]]
-name = "hello_lights"
-path = "test/hello_lights/bin.rs"
 
 [lib]
