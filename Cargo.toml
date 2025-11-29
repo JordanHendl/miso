@@ -6,6 +6,8 @@ edition = "2021"
 [dependencies]
 
 [build-dependencies]
+bento = { git = "https://github.com/JordanHendl/bento" }
+dashi = { git = "https://github.com/JordanHendl/dashi" }
 walkdir = "2.4.0"
 
 [package.metadata.slang]
