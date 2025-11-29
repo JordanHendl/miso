@@ -1,5 +1,6 @@
 // Vertex Shader (vertex.slang)
 import bindless;
+import meshi_bindless;
 import miso;
 
 struct VSInput
@@ -19,7 +20,7 @@ struct VSOutput
     float3 pos;
     float3 normal;
     float2 tex_coords;
-}
+};
 
 [shader("vertex")]
 VSOutput main(VSInput input)
