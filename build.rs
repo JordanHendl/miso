@@ -54,44 +54,44 @@ fn main() {
             input_file.to_str().expect("Invalid input file path")
         );
 
-        // Run the `slang` command.
-        let status = Command::new("slangc")
-            .arg(input_file)
-            .arg("-profile")
-            .arg("glsl_460")
-            .arg("-target")
-            .arg("spirv")
-            .arg("-capability")
-            .arg("glsl_spirv")
-            .arg("-I")
-            .arg(&include_dir)
-            .arg("-fspv-reflect")
-            .arg("-force-glsl-scalar-layout")
-            .arg("-fvk-use-gl-layout")
-            .arg("-fvk-invert-y")
-//            .arg("-emit-spirv-via-glsl")
-            .arg("-Xdxc")
-            .arg("--reflect-all-block-variables")
-            .arg("-g1")
-            .arg("-entry")
-            .arg("main")
-            .arg("-o")
-            .arg(&output_file)
-            .status()
-            .expect("Failed to execute slang command");
-
-        if !status.success() {
-            panic!(
-                "Slang compilation failed for file: {}",
-                input_file.display()
-            );
-        }
-
-        println!(
-            "Compiled {} to {}",
-            input_file.display(),
-            output_file.display()
-        );
+//        // Run the `slang` command.
+//        let status = Command::new("slangc")
+//            .arg(input_file)
+//            .arg("-profile")
+//            .arg("glsl_460")
+//            .arg("-target")
+//            .arg("spirv")
+//            .arg("-capability")
+//            .arg("glsl_spirv")
+//            .arg("-I")
+//            .arg(&include_dir)
+//            .arg("-fspv-reflect")
+//            .arg("-force-glsl-scalar-layout")
+//            .arg("-fvk-use-gl-layout")
+//            .arg("-fvk-invert-y")
+////            .arg("-emit-spirv-via-glsl")
+//            .arg("-Xdxc")
+//            .arg("--reflect-all-block-variables")
+//            .arg("-g1")
+//            .arg("-entry")
+//            .arg("main")
+//            .arg("-o")
+//            .arg(&output_file)
+//            .status()
+//            .expect("Failed to execute slang command");
+//
+//        if !status.success() {
+//            panic!(
+//                "Slang compilation failed for file: {}",
+//                input_file.display()
+//            );
+//        }
+//
+//        println!(
+//            "Compiled {} to {}",
+//            input_file.display(),
+//            output_file.display()
+//        );
     }
 }
 
